@@ -1,0 +1,24 @@
+name: token_test
+
+# Test of the secret COURSE_TOKEN (Aryu, 2 Nov 2026): can a job in this public repo read AND write the private repos? Writes only a temporary branch and deletes it at once. Prints no data and never the token.
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest   # free in a public repo
+    steps:
+      - name: Token test
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "RESULT: secret COURSE_TOKEN is missing or empty"; exit 1; fi
+          for r in umalyfe-real-kyoto2200 umalyfe-engine; do
+            SHA=$(gh api repos/jeremiahbnjmn/$r/commits/HEAD --jq .sha 2>/dev/null) || { echo "RESULT: $r READ FAILED"; continue; }
+            echo "RESULT: $r read ok"
+            if gh api -X POST repos/jeremiahbnjmn/$r/git/refs -f ref=refs/heads/token-test -f sha="$SHA" >/dev/null 2>&1; then
+              echo "RESULT: $r write ok (temporary branch created)"
+              gh api -X DELETE repos/jeremiahbnjmn/$r/git/refs/heads/token-test >/dev/null 2>&1 && echo "RESULT: $r temporary branch deleted" || echo "RESULT: $r branch NOT deleted"
+            else echo "RESULT: $r WRITE FAILED"; fi
+          done
+          if gh api repos/jeremiahbnjmn/umalyfe-wiki/commits/HEAD --jq .sha >/dev/null 2>&1; then echo "RESULT: umalyfe-wiki readable (token reaches more than the two repos)"; else echo "RESULT: umalyfe-wiki not reachable (good: token limited)"; fi
