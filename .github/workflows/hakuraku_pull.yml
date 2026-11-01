@@ -1,12 +1,12 @@
 name: hakuraku_pull
 
 # Moved to this PUBLIC repo (free minutes) on 2 Nov 2026, Aryu's go. Runs tools/hakuraku_job.py from the private course repo and stores there
-# with the secret COURSE_TOKEN. NO DATA is printed in this log (public): only counts. Schedule is OFF until Aryu says go.
+# with the secret COURSE_TOKEN. NO DATA is printed in this log (public): only counts. Schedule ON since 2 Nov 2026 (Aryu's go).
 # One run = one sitting; BUDGET_MIN minutes of pulling (default 50 for an hourly run). Manual: Actions > hakuraku_pull > Run workflow.
 # Do not run a browser sitting at the same time: both start from the same next rank.
 on:
-  # schedule:
-  #   - cron: '17 * * * *'
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       races:

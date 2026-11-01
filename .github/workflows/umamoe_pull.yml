@@ -4,9 +4,9 @@ name: umamoe_pull
 # R114 (Aryu's go, 1 Nov 2026): once a day, download the uma.moe Skill Explorer files into scores/umamoe-raw/ (raw copy, never deleted; git keeps older versions).
 # Runs at 03:30 UTC, before release_scores (04:00). A push of this file or of build/umamoe_pull.py runs it once as a test. It commits only when a file's content changed.
 on:
-  # schedule OFF until Aryu's go (planned daily):
-  # schedule:
-  #   - cron: '30 3 * * *'
+  # schedule ON since 2 Nov 2026 (Aryu's go)
+  schedule:
+    - cron: '30 3 * * *'
   workflow_dispatch:
 
 permissions:
