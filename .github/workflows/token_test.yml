@@ -13,7 +13,9 @@ jobs:
           GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then echo "RESULT: secret COURSE_TOKEN is missing or empty"; exit 1; fi
+          echo "RESULT: token check on a public repo: $(gh api repos/jeremiahbnjmn/pub --jq .full_name 2>&1 | cut -c1-160)"
           for r in umalyfe-real-kyoto2200 umalyfe-engine; do
+            echo "RESULT: $r message: $(gh api repos/jeremiahbnjmn/$r --jq .full_name 2>&1 | cut -c1-200)"
             SHA=$(gh api repos/jeremiahbnjmn/$r/commits/HEAD --jq .sha 2>/dev/null) || { echo "RESULT: $r READ FAILED"; continue; }
             echo "RESULT: $r read ok"
             if gh api -X POST repos/jeremiahbnjmn/$r/git/refs -f ref=refs/heads/token-test -f sha="$SHA" >/dev/null 2>&1; then
