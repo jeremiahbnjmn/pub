@@ -1,0 +1,27 @@
+name: probe_hakuraku
+
+# Read-only test (Aryu's go "R118", 1 Nov 2026): can a GitHub job fetch Hakuraku race files the way the pull script in the browser does? Fetches ONE race (its team file 1, its replay) and prints status, size, rate headers and the first bytes; prints Hakuraku's robots.txt in full. Nothing is stored or committed.
+# The race id is built from the first line of the public id list exactly as hakuraku_rolling.js does.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe one race
+        run: |
+          UA='umaskill-score-pull/1.0 (+https://github.com/jeremiahbnjmn/umalyfe-engine; probe of one race, personal tool)'
+          echo "== robots.txt (full)"; curl -s -A "$UA" https://hakuraku.moe/robots.txt; echo
+          TXT=$(curl -s https://raw.githubusercontent.com/jeremiahbnjmn/pub/main/ids.txt | tr -d '\n')
+          D=${TXT:6}; S=${D:0:20}
+          ID="CM19/8000${S:0:2}_${S:2:8}_${S:10}.json"
+          echo "== race id: $ID"
+          ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$ID")
+          for path in "teams/1" "replay"; do
+            sleep 1
+            code=$(curl -s -D /tmp/h.txt -A "$UA" -o /tmp/p.out -w '%{http_code} %{size_download} bytes %{content_type}' "https://hakuraku.moe/api/races/$ENC/$path" || echo "curl failed")
+            echo "== $path -> $code"
+            grep -i -E '^(retry-after|x-ratelimit|ratelimit|cache-control|content-encoding|cf-cache-status|server):' /tmp/h.txt | tr -d '\r'
+            head -c 250 /tmp/p.out | tr '\n' ' '; echo
+          done

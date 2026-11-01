@@ -1,0 +1,42 @@
+# Moved from umalyfe-engine to this PUBLIC repo (free minutes) on 2 Nov 2026 (Aryu's go): runs here, reads and writes umalyfe-engine with the secret COURSE_TOKEN.
+name: umamoe_pull
+
+# R114 (Aryu's go, 1 Nov 2026): once a day, download the uma.moe Skill Explorer files into scores/umamoe-raw/ (raw copy, never deleted; git keeps older versions).
+# Runs at 03:30 UTC, before release_scores (04:00). A push of this file or of build/umamoe_pull.py runs it once as a test. It commits only when a file's content changed.
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Remember the engine commit
+        run: echo "ENGINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Download
+        run: |
+          set -e
+          python3 build/umamoe_pull.py | tee pull.txt
+          echo "::notice title=umamoe_pull::$(tail -n 1 pull.txt)"
+      - name: Commit if changed
+        run: |
+          set -e
+          git config user.name "umaskill-bot"; git config user.email "umaskill-bot@users.noreply.github.com"
+          git add scores/umamoe-raw
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git commit -m "umamoe: refresh raw files"
+          git pull -q --rebase
+          git push -q

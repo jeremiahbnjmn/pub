@@ -1,0 +1,98 @@
+# Moved from umalyfe-engine to this PUBLIC repo (free minutes) on 2 Nov 2026 (Aryu's go). Starts: every day 04:00 UTC (rebuilds only if the scores changed), by hand (Run workflow, force ticked = rebuild now), or by a repository_dispatch of type scores_release (force). Reads and writes umalyfe-engine with the secret COURSE_TOKEN.
+name: release_scores
+
+# V43: ONE rolling scores release, tag scores-latest (Aryu's go, 29 Oct 2026). The zip umaskill-scores.zip holds ONLY the scores folder (all sources: interim now, umalyfe later).
+# The link never changes: the job replaces the zip inside the same release. It is not marked "Latest", so GitHub's Latest badge stays with the program release.
+# Unzip it in the same place as the program zip: it adds or replaces umaskill\scores and touches nothing else.
+# The release text says when it was built, how many courses, the newest scan date and the commit it was built from (the daily rule reads that commit).
+# Three ways it starts:
+#   1. Automatically every day at 04:00 UTC: it rebuilds only if the score files changed since the commit named in the release text (or the release does not exist yet).
+#   2. Push a change to scores/RELEASE.txt, or Run workflow with force ticked: rebuilds now, no change check.
+#   3. A push that changes this file runs the daily rule too (a free test of it; proven 29 Oct 2026: first run created the release, a later run with no score change did nothing).
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  repository_dispatch:
+    types: [scores_release]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Tick to rebuild now even if the scores did not change'
+        type: boolean
+        default: false
+
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+          fetch-depth: 0
+      - name: Remember the engine commit
+        run: echo "ENGINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Decide
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+          FORCE_INPUT: ${{ inputs.force }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -e
+          FORCE=no
+          if [ "$FORCE_INPUT" = true ]; then FORCE=yes; fi
+          if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then FORCE=yes; fi
+          EXISTS=no
+          if gh release view scores-latest >/dev/null 2>&1; then EXISTS=yes; fi
+          CHANGED=yes
+          if [ "$FORCE" = no ] && [ "$EXISTS" = yes ]; then
+            LASTSHA=$(gh release view scores-latest --json body -q .body | grep -o 'commit [0-9a-f]\{40\}' | head -n 1 | cut -d' ' -f2)
+            if [ -n "$LASTSHA" ] && git cat-file -e "${LASTSHA}^{commit}" 2>/dev/null; then
+              if git diff --name-only "$LASTSHA" HEAD -- scores/interim scores/umamoe-raw build/pc_scores.py | grep -Eq '(average|calculated_random)\.csv\.gz$|pc_scores\.py$|umamoe-raw/'; then CHANGED=yes; else CHANGED=no; fi
+            fi
+          fi
+          if [ "$CHANGED" = no ]; then
+            echo "Scores unchanged since the last release: nothing to do."
+            echo "SKIP=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "EXISTS=$EXISTS" >> "$GITHUB_ENV"
+      - name: Build the scores folder
+        if: env.SKIP != 'true'
+        run: |
+          set -e
+          D=dist/umaskill
+          mkdir -p $D
+          python3 build/pc_scores.py --out $D
+      - name: Zip and list
+        if: env.SKIP != 'true'
+        run: |
+          set -e
+          cd dist
+          zip -rq umaskill-scores.zip umaskill
+          unzip -l umaskill-scores.zip | tail -1
+          unzip -l umaskill-scores.zip | grep "index.txt"
+      - name: Publish the release
+        if: env.SKIP != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+        run: |
+          set -e
+          N=$(for f in dist/umaskill/scores/*/index.txt; do printf '%s %s, ' "$(basename "$(dirname "$f")")" "$(grep -c '^C|' "$f")"; done)
+          NEWEST=$(cat dist/umaskill/scores/*/index.txt | grep '^D|' | cut -d'|' -f2 | sort | tail -n 1)
+          printf 'Scores only, no program. Unzip it in the same place as the program zip: it adds or replaces the scores folder, nothing else.\n\nBuilt %s UTC: courses per source: %snewest scan %s.\nBuilt from commit %s\n' "$(date -u '+%Y-%m-%d %H:%M')" "$N" "$NEWEST" "$ENGINE_SHA" > notes.txt
+          if [ "$EXISTS" = yes ]; then
+            gh release upload scores-latest dist/umaskill-scores.zip --clobber
+            gh release edit scores-latest --notes-file notes.txt --latest=false
+          else
+            gh release create scores-latest dist/umaskill-scores.zip --target "$ENGINE_SHA" --title "umaskill scores (latest)" --notes-file notes.txt --latest=false
+          fi

@@ -1,0 +1,111 @@
+# Moved from umalyfe-engine to this PUBLIC repo (free minutes, also the Windows check) on 2 Nov 2026 (Aryu's go). Starts: by hand (Run workflow: tag, or empty = the line in umaskill/RELEASE.txt; dry = build only) or by a repository_dispatch of type release_zip. Reads and writes umalyfe-engine with the secret COURSE_TOKEN.
+name: release_zip
+
+# A5: builds umaskill-<tag>.zip (program, guide, changelog; NO scores, they have their own release: release_scores.yml) and attaches it to a new GitHub Release
+# (the release creates the tag). A tag with a dash (v1.0-rc1) becomes a pre-release (for testing); the README line "Latest pre-release" or "Latest release" is rewritten to match. Any session may push a pre-release tag on its own; only a tag without a dash needs Aryu's go (Aryu, 1 Nov 2026).
+# Two ways to start it:
+#   1. Push a change to umaskill/RELEASE.txt: its one line is the tag, for example v1.0 or v1.0-rc2 (a normal git push, no button).
+#   2. By hand: Actions > release_zip > Run workflow, type the tag.
+on:
+  repository_dispatch:
+    types: [release_zip]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v1.1 or v1.1-rc26 (empty = the line in umaskill/RELEASE.txt)'
+        required: false
+      dry:
+        description: 'true = build and list the zip only, publish nothing'
+        type: boolean
+        default: false
+
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine
+
+jobs:
+  check:   # R103 (v1.1): the PowerShell check runs first; a broken script publishes nothing
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Remember the engine commit
+        run: echo "ENGINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Parse every .ps1 and compile the C# blocks inside them
+        shell: powershell
+        run: ./build/ps_check.ps1
+  zip:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Remember the engine commit
+        run: echo "ENGINE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Find the tag
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -e
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then TAG=$(head -n 1 umaskill/RELEASE.txt | tr -d ' \r\n'); fi
+          case "$TAG" in v[0-9]*) ;; *) echo "Tag '$TAG' must look like v1.0 or v1.0-rc2"; exit 1;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Release $TAG already exists: use a new tag"; exit 1; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Build the umaskill folder
+        run: |
+          set -e
+          D=dist/umaskill
+          mkdir -p $D/code $D/docs $D/tools
+          cp umaskill/umaskill.bat $D/
+          cp umaskill/GUIDE.md umaskill/CHANGELOG.md $D/docs/
+          cp umaskill/tools/*.bat $D/tools/
+          cd umaskill
+          cp calibrate.ps1 calibration_core.ps1 click_picks.ps1 learn_scan.ps1 oneclick.ps1 pick_skills.ps1 read_learn.ps1 reader_core.ps1 picker_data.txt ../$D/code/
+      - name: Zip and list
+        run: |
+          set -e
+          cd dist
+          zip -r "umaskill-${TAG}.zip" umaskill
+          unzip -l "umaskill-${TAG}.zip"
+      - name: Publish the release
+        if: ${{ inputs.dry != true }}
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+        run: |
+          set -e
+          FLAG=""
+          case "$TAG" in *-*) FLAG="--prerelease";; esac
+          gh release create "$TAG" "dist/umaskill-${TAG}.zip" --target "$ENGINE_SHA" --title "umaskill $TAG" --notes-file umaskill/CHANGELOG.md $FLAG
+      - name: Point the README at this release
+        if: ${{ inputs.dry != true }}
+        run: |
+          set -e
+          python3 - "$TAG" "https://github.com/jeremiahbnjmn/umalyfe-engine/releases/tag/${TAG}" "https://github.com/jeremiahbnjmn/umalyfe-engine/releases/download/${TAG}/umaskill-${TAG}.zip" <<'PY'
+          import re, sys
+          tag, url, dl = sys.argv[1], sys.argv[2], sys.argv[3]
+          s = open('README.md', encoding='utf-8').read()
+          key = 'latest-prerelease' if '-' in tag else 'latest-released'   # a tag with a dash is a pre-release
+          new = '<!-- %s -->[%s](%s), direct download [umaskill-%s.zip](%s)<!-- /%s -->' % (key, tag, url, tag, dl, key)
+          s = re.sub(r'<!-- %s -->.*?<!-- /%s -->' % (key, key), lambda m: new, s, flags=re.S)
+          open('README.md', 'w', encoding='utf-8', newline='\n').write(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then echo "README already points here."; else
+            git commit -m "README: latest release line is ${TAG}"
+            git pull --rebase
+            git push
+          fi

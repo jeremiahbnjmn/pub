@@ -1,0 +1,24 @@
+name: probe_sites
+
+# Read-only test (Aryu's go, 1 Nov 2026): can a GitHub job reach these addresses? Prints status, size and the first bytes of each. Nothing is stored or committed.
+# Edit the list in `urls` to probe other addresses, then run it: Actions > probe_sites > Run workflow. Used to fill the "can the daily GitHub job pull it" notes in umalyfe `Knowledge/uma.moe site.md`.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe
+        run: |
+          UA='umaskill-score-pull/1.0 (+https://github.com/jeremiahbnjmn/umalyfe-engine; probe, personal tool)'
+          urls="
+          https://mihonostudios.com/robots.txt
+          https://mihonostudios.com/tools/skill-recommender
+          "
+          for u in $urls; do
+            sleep 1
+            code=$(curl -s -A "$UA" -o /tmp/p.out -w '%{http_code} %{size_download} bytes %{content_type}' "$u" || echo "curl failed")
+            echo "== $u -> $code"
+            head -c 1200 /tmp/p.out | tr '\n' ' ' | cut -c1-1200; echo
+          done
