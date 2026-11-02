@@ -1,0 +1,39 @@
+name: random_ground
+
+# Ported from umalyfe-engine to this PUBLIC repo (free minutes) on 2 Nov 2026 (Aryu's go). MANUAL start only (pub cannot see pushes to the private engine repo):
+# Actions > random_ground > Run workflow, after the Mihono scores (scores/interim) changed. Runs build/random_ground.py in the engine repo and pushes changed Random files.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-push
+  cancel-in-progress: false
+
+jobs:
+  random:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Build Random files
+        working-directory: engine
+        run: python3 build/random_ground.py
+      - name: Push changes back
+        working-directory: engine
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A scores/interim
+          if git diff --cached --quiet; then
+            echo "No Random file changed."
+          else
+            git commit -m "Random ground files rebuilt by the random_ground job"
+            git pull --rebase
+            git push
+          fi

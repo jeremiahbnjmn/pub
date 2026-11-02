@@ -1,0 +1,37 @@
+name: picker_test
+
+# Ported from umalyfe-engine to this PUBLIC repo (free minutes) on 2 Nov 2026 (Aryu's go). MANUAL start only:
+# Actions > picker_test > Run workflow. Runs the picker (pick_skills.ps1) on made-up data, builds the umaskill window without showing it,
+# and puts the window picture on the PRIVATE engine branch layout-picture (read it with git fetch there; nothing is shown in this public repo).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Run the picker on made-up data and build the window
+        shell: powershell
+        working-directory: engine
+        run: ./build/picker_test.ps1
+      - name: Publish the picture on the engine branch layout-picture
+        if: always()
+        shell: bash
+        working-directory: engine
+        run: |
+          if [ -f layout_out/window.png ]; then
+            git config user.name "picker_test"; git config user.email "picker_test@users.noreply.github.com"
+            git checkout -q --orphan layout-picture
+            git rm -rfq . || true
+            git add layout_out
+            git commit -q -m "window picture of engine $GITHUB_SHA"
+            git push -f -q origin layout-picture
+          fi

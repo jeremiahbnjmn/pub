@@ -1,0 +1,23 @@
+name: ps_check
+
+# Ported from umalyfe-engine to this PUBLIC repo (free minutes) on 2 Nov 2026 (Aryu's go). MANUAL start only:
+# Actions > ps_check > Run workflow (pub cannot see pushes to the private engine repo). Parses every .ps1 and compiles the C# blocks. Changes nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Parse every .ps1 and compile the C# blocks inside them
+        shell: powershell
+        working-directory: engine
+        run: ./build/ps_check.ps1
