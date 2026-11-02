@@ -29,9 +29,10 @@ jobs:
         run: |
           if [ -f layout_out/window.png ]; then
             git config user.name "picker_test"; git config user.email "picker_test@users.noreply.github.com"
+            ESHA=$(git rev-parse HEAD)
             git checkout -q --orphan layout-picture
             git rm -rfq . || true
             git add layout_out
-            git commit -q -m "window picture of engine $GITHUB_SHA"
+            git commit -q -m "window picture of engine $ESHA"
             git push -f -q origin layout-picture
           fi
