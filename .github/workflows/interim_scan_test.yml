@@ -1,0 +1,54 @@
+name: interim_scan_test
+
+# Test only (4 Nov 2026, Aryu's go): can the Mihono scan run on a GitHub machine? Runs the scan of umalyfe-engine in a headless browser,
+# prints counts and timing, and keeps the piece file as a downloadable build artifact for 3 days. STORES NOTHING in any repo. Manual start only.
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: 'First course index (default 7)'
+        default: '7'
+      courses:
+        description: 'How many courses (default 1)'
+        default: '1'
+      full:
+        description: 'true = 5 styles x 4 grounds (20 scans per course); false = 1 scan smoke test'
+        default: 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+          sparse-checkout: build/interim_scan.js
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1.48.0
+          npx playwright install --with-deps chromium
+      - name: Scan
+        env:
+          START: ${{ github.event.inputs.start || '7' }}
+          COURSES: ${{ github.event.inputs.courses || '1' }}
+          FULL: ${{ github.event.inputs.full || 'true' }}
+          LIMIT_MIN: '40'
+        run: node tools/interim_runner.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interim-piece
+          path: out/
+          retention-days: 3
+          if-no-files-found: ignore
