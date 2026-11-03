@@ -2,7 +2,7 @@ name: hakuraku_pull
 
 # Moved to this PUBLIC repo (free minutes) on 2 Nov 2026, Aryu's go. Runs tools/hakuraku_job.py from the private course repo and stores there.
 # with the secret COURSE_TOKEN. NO DATA is printed in this log (public): only counts. Schedule ON since 2 Nov 2026 (Aryu's go).
-# One run = one sitting; BUDGET_MIN minutes of pulling (default 50 for an hourly run). Manual: Actions > hakuraku_pull > Run workflow.
+# One run = one sitting; BUDGET_MIN minutes of pulling (default 40 for an hourly run). Manual: Actions > hakuraku_pull > Run workflow.
 # Two timed starts per hour (minutes 13 and 43, changed 2 Nov: minute 17 never fired); the concurrency group keeps one run at a time.
 # Do not run a browser sitting at the same time: both start from the same next rank.
 on:
@@ -15,8 +15,8 @@ on:
         description: 'Races in this run (default 1000)'
         default: '1000'
       budget:
-        description: 'Minutes of pulling (default 50)'
-        default: '50'
+        description: 'Minutes of pulling (default 40)'
+        default: '40'
       dry:
         description: 'true = test only, nothing stored'
         default: 'false'
@@ -31,7 +31,7 @@ permissions:
 jobs:
   pull:
     runs-on: ubuntu-latest   # public repo = free; per Aryu's rule the dearest Linux runner while it is free
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +50,7 @@ jobs:
         working-directory: course
         env:
           MAX_RACES: ${{ github.event.inputs.races || '1000' }}
-          BUDGET_MIN: ${{ github.event.inputs.budget || '50' }}
+          BUDGET_MIN: ${{ github.event.inputs.budget || '40' }}
           DRY: ${{ github.event.inputs.dry || 'false' }}
         run: python3 -I tools/hakuraku_job.py
       - name: Store
