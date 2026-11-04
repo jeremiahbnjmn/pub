@@ -4,8 +4,12 @@ name: interim_scan
 # One run: reads which course is next (scores/interim/plan.json in umalyfe-engine), scans courses in a headless browser, measures the real
 # minutes per course and starts another only if it fits BUDGET_MIN, then stores each piece with build/interim_store.py (which averages and
 # pushes; the push starts random_ground). A scan that fails is skipped by the store step and shows up as a GAP, redone by the next run.
+# Schedule ON since 4 Nov 2026 (Aryu's go): two timed starts per hour; the concurrency group keeps one run at a time (one waits in line).
 # Stop it: Actions > interim_scan > ... > Disable workflow (or tell Claude "stop the Mihono scan"). Prints counts and timing only.
 on:
+  schedule:
+    - cron: '23 * * * *'
+    - cron: '53 * * * *'
   workflow_dispatch:
     inputs:
       budget:
