@@ -48,6 +48,12 @@ jobs:
           FULL: ${{ github.event.inputs.full || 'true' }}
           LIMIT_MIN: '40'
         run: node tools/interim_runner.js
+      - name: Course list check
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+        run: python3 -I tools/interim_plancheck.py
       - name: Compare with the browser scan of the same course
         if: ${{ always() && github.event.inputs.compare == 'true' }}
         continue-on-error: true

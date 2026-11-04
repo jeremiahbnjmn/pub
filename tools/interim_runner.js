@@ -29,9 +29,10 @@ const sl = ms => new Promise(r => setTimeout(r, ms));
     if (line !== last) { console.log(mins() + ' min', line); last = line; }
     if (!s || s[0] === 'stopped' || s[0] === 'error') break;
     const pos = +String(s[1]).split('/')[0]; if (pos0 === null) pos0 = pos; doneC = pos - pos0;
-    if (!stopping && BUDGET && doneC >= 1) {
-      const per = (Date.now() - tScan) / 60000 / doneC;
-      if ((Date.now() - t0) / 60000 + per * 1.15 > BUDGET) { stopping = true; console.log(mins() + ' min: measured ' + per.toFixed(1) + ' min per course; next one does not fit the ' + BUDGET + ' min budget, stopping after this course'); await page.evaluate(() => { window.I.stop = true; }); }
+    if (!stopping && BUDGET) {
+      // The stop only counts after the course now running, so decide early: if this course ends at tEnd and one more would not fit, stop now.
+      const per = doneC >= 1 ? (Date.now() - tScan) / 60000 / doneC : +(E.EST_MIN || 24), tEnd = (tScan - t0) / 60000 + (doneC + 1) * per;
+      if (tEnd + per * 1.15 > BUDGET) { stopping = true; console.log(mins() + ' min: ' + (doneC ? 'measured' : 'assumed') + ' ' + per.toFixed(1) + ' min per course; the course now running ends at about ' + tEnd.toFixed(0) + ' min and the next would not fit the ' + BUDGET + ' min budget, stopping after it'); await page.evaluate(() => { window.I.stop = true; }); }
     }
     if (!stopping && (Date.now() - t0) / 60000 > LIMIT) { stopping = true; console.log('LIMIT reached, stopping after this course'); await page.evaluate(() => { window.I.stop = true; }); }
   }

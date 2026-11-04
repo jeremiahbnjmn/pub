@@ -62,7 +62,10 @@ jobs:
           LIMIT_MIN: '110'
         run: node tools/interim_runner.js
       - name: Store
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
         run: |
+          python3 -I tools/interim_plancheck.py || true
           set -e
           for f in $(ls out/*.json.gz | sort); do
             echo "storing $f"
