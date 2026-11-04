@@ -68,6 +68,7 @@ jobs:
           python3 -I tools/interim_plancheck.py || true
           set -e
           for f in $(ls out/*.json.gz | sort); do
+            python3 -I tools/interim_fixlabels.py "$f"
             echo "storing $f"
             python3 -I engine/build/interim_store.py "$f" "$PWD/engine"
           done
