@@ -1,9 +1,11 @@
 // Interim (Mihono) scan test runner. Runs build/interim_scan.js from umalyfe-engine inside a headless browser on the GitHub runner.
 // Prints counts and timing only. Saves the piece file(s) into ./out (uploaded as a build artifact by the workflow). Stores nothing in any repo.
-// Env: START (course index), COURSES (how many), FULL ('true' = 5 styles x 4 grounds, else 1 x 1 smoke test), LIMIT_MIN (give up after N minutes), ROUND.
+// Env: START (course index), ROUND, COURSES (most courses), FULL ('true' = 5 styles x 4 grounds, else 1 x 1 smoke test),
+// BUDGET_MIN (calibration: after each finished course the runner measures the real minutes per course on this machine and starts another one
+// only if it still fits in the budget, so a slow machine does fewer courses but never loses its work), LIMIT_MIN (hard stop of new courses).
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
-const E = process.env, START = +(E.START || 7), COURSES = +(E.COURSES || 1), FULL = E.FULL === 'true', LIMIT = +(E.LIMIT_MIN || 40), ROUND = +(E.ROUND || 1);
+const E = process.env, START = +(E.START || 7), COURSES = +(E.COURSES || 1), FULL = E.FULL === 'true', LIMIT = +(E.LIMIT_MIN || 110), BUDGET = +(E.BUDGET_MIN || 0), ROUND = +(E.ROUND || 1);
 const src0 = fs.readFileSync(path.join(__dirname, '..', 'engine', 'build', 'interim_scan.js'), 'utf8');
 const cfg = `var CFG = {ROUND: ${ROUND}, START: ${START}, INTERVAL_MIN: 56, STYLES: ${FULL ? '[0, 1, 2, 3, 4]' : '[0]'}, GROUNDS: ${FULL ? '[0, 1, 2, 3]' : '[0]'}, MAX_COURSES: ${COURSES}, NOSAVE: true};`;
 const src = src0.replace(/var CFG = \{[^;]*\};/, cfg);
@@ -19,14 +21,19 @@ const sl = ms => new Promise(r => setTimeout(r, ms));
   await page.waitForSelector('#rcd-v-2-track', { timeout: 60000 });
   console.log('page ready; hidden =', await page.evaluate(() => document.hidden));
   await page.evaluate(src);
-  let last = '';
+  let last = '', stopping = false, tScan = Date.now(), doneC = 0, pos0 = null;
   while (true) {
     await sl(20000);
     const s = await page.evaluate(() => window.I && window.I.s());
     const line = JSON.stringify(s);
     if (line !== last) { console.log(mins() + ' min', line); last = line; }
     if (!s || s[0] === 'stopped' || s[0] === 'error') break;
-    if ((Date.now() - t0) / 60000 > LIMIT) { console.log('LIMIT reached, stopping'); await page.evaluate(() => { window.I.stop = true; }); await sl(60000); break; }
+    const pos = +String(s[1]).split('/')[0]; if (pos0 === null) pos0 = pos; doneC = pos - pos0;
+    if (!stopping && BUDGET && doneC >= 1) {
+      const per = (Date.now() - tScan) / 60000 / doneC;
+      if ((Date.now() - t0) / 60000 + per * 1.15 > BUDGET) { stopping = true; console.log(mins() + ' min: measured ' + per.toFixed(1) + ' min per course; next one does not fit the ' + BUDGET + ' min budget, stopping after this course'); await page.evaluate(() => { window.I.stop = true; }); }
+    }
+    if (!stopping && (Date.now() - t0) / 60000 > LIMIT) { stopping = true; console.log('LIMIT reached, stopping after this course'); await page.evaluate(() => { window.I.stop = true; }); }
   }
   const s = await page.evaluate(() => window.I && window.I.s());
   const names = await page.evaluate(() => Object.keys(window.I.blobs));

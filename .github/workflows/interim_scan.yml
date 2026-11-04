@@ -1,0 +1,77 @@
+name: interim_scan
+
+# Mihono scan on a free GitHub machine (4 Nov 2026, Aryu's go; test showed ~24 min per course here vs ~11 in a browser).
+# One run: reads which course is next (scores/interim/plan.json in umalyfe-engine), scans courses in a headless browser, measures the real
+# minutes per course and starts another only if it fits BUDGET_MIN, then stores each piece with build/interim_store.py (which averages and
+# pushes; the push starts random_ground). A scan that fails is skipped by the store step and shows up as a GAP, redone by the next run.
+# Stop it: Actions > interim_scan > ... > Disable workflow (or tell Claude "stop the Mihono scan"). Prints counts and timing only.
+on:
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: 'Minutes for scanning (default 85); a course is started only if it fits'
+        default: '85'
+
+concurrency:
+  group: interim-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jeremiahbnjmn/umalyfe-engine
+          token: ${{ secrets.COURSE_TOKEN }}
+          path: engine
+      - name: Git set-up for the store script
+        run: |
+          git -C engine config user.name 'umaskill-bot'
+          git -C engine config user.email 'umaskill-bot@users.noreply.github.com'
+          git -C engine fetch -q --depth=1 origin main
+          git -C engine remote set-head origin main
+      - name: Which course is next
+        run: |
+          python3 -I - <<'PY' >> "$GITHUB_ENV"
+          import json
+          p = json.load(open('engine/scores/interim/plan.json')); n = len(p['courses'])
+          r = max(map(int, p['rounds'])); done = set(p['rounds'][str(r)]['done'])
+          gap = [i for i in range(max(done) + 1) if i not in done] if done else []
+          start = gap[0] if gap else (max(done) + 1 if done else 0)
+          if start >= n: r, start = r + 1, 0
+          print(f"ROUND={r}\nSTART={start}\nCOURSES={1 if gap else 1000}")
+          PY
+          grep -E '^(ROUND|START|COURSES)=' "$GITHUB_ENV" | tr '\n' ' '
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1.48.0
+          npx playwright install --with-deps chromium
+      - name: Scan
+        env:
+          FULL: 'true'
+          BUDGET_MIN: ${{ github.event.inputs.budget || '85' }}
+          LIMIT_MIN: '110'
+        run: node tools/interim_runner.js
+      - name: Store
+        run: |
+          set -e
+          for f in $(ls out/*.json.gz | sort); do
+            echo "storing $f"
+            python3 -I engine/build/interim_store.py "$f" "$PWD/engine"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interim-pieces
+          path: out/
+          retention-days: 3
+          if-no-files-found: ignore
