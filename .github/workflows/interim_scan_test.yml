@@ -14,6 +14,9 @@ on:
       full:
         description: 'true = 5 styles x 4 grounds (20 scans per course); false = 1 scan smoke test'
         default: 'true'
+      compare:
+        description: 'true = compare with the browser scan of the same course (it must be stored already)'
+        default: 'false'
 
 permissions:
   contents: read
@@ -45,6 +48,13 @@ jobs:
           FULL: ${{ github.event.inputs.full || 'true' }}
           LIMIT_MIN: '40'
         run: node tools/interim_runner.js
+      - name: Compare with the browser scan of the same course
+        if: ${{ always() && github.event.inputs.compare == 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
+          START: ${{ github.event.inputs.start }}
+        run: python3 -I tools/interim_compare.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
