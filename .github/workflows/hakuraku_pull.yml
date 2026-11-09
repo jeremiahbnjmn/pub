@@ -27,6 +27,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write   # lets the last step switch this workflow off when the list has ended
 
 jobs:
   pull:
@@ -59,12 +60,17 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add --sparse cm19-2026-09-19/teams cm19-2026-09-19/replays cm19-2026-09-19/pull_state.json cm19-2026-09-19/pull_job_log.tsv
+          git add --sparse -A cm19-2026-09-19/pull_state.json cm19-2026-09-19/pull_job_log.tsv
+          [ -d cm19-2026-09-19/teams ] && git add --sparse -A cm19-2026-09-19/teams cm19-2026-09-19/replays
           if git diff --cached --quiet; then echo "nothing to store"; exit 0; fi
           git commit -q -m "hakuraku_pull: $(tail -n 1 cm19-2026-09-19/pull_job_log.tsv | cut -f1,2)"
           git push -q
       - name: Stop when the list has ended
-        if: ${{ hashFiles('/tmp/hakuraku_done') != '' }}
+        if: ${{ always() }}
         env:
-          GH_TOKEN: ${{ secrets.COURSE_TOKEN }}
-        run: gh api -X PUT repos/${{ github.repository }}/actions/workflows/hakuraku_pull.yml/disable
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f /tmp/hakuraku_done ]; then
+            echo "list ended: switching this workflow off"
+            gh api -X PUT repos/${{ github.repository }}/actions/workflows/hakuraku_pull.yml/disable
+          fi
